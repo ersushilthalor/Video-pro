@@ -21,8 +21,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source
+      - name: Checkout Video-pro workflow
         uses: actions/checkout@v4
+
+      - name: Checkout complete PhotonCamera source
+        uses: actions/checkout@v4
+        with:
+          repository: ersushilthalor/PhotonCamera
+          ref: 42fde14b7a1cc6edabf2587c56e5ecd3940bda67
+          path: photon_repo
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
