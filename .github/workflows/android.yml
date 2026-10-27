@@ -1,9 +1,20 @@
-name: Build APK
+name: Build PhotonCamera APK
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: photon-camera-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -17,19 +28,45 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
-      - name: Setup Gradle
+      - name: Install required Android SDK packages
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865" "cmake;3.22.1"
+
+      - name: Set up Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+      - name: Verify front-camera crop regression guard
+        working-directory: photon_repo
+        run: |
+          test_file="app/src/test/java/com/hinnka/mycamera/lut/RealtimeVideoRendererTransformTest.kt"
+          renderer_file="app/src/main/java/com/hinnka/mycamera/lut/RealtimeVideoRenderer.kt"
+          grep -Fq 'fun frontEightMpFourThreeToPortrait4kKeepsCropInOutputQuadAxes()' "$test_file"
+          grep -Fq 'fun unrotatedEightMpSourceUsesItsUnrotatedCropGeometry()' "$test_file"
+          grep -Fq 'fun landscapeRearCameraCropRemainsUnchanged()' "$test_file"
+          grep -Fq 'return resolveOutputQuadCropRect(' "$renderer_file"
+
+      - name: Run video transform regression tests
+        working-directory: photon_repo
+        run: |
+          gradle --no-daemon :app:testDefaultDebugUnitTest --tests com.hinnka.mycamera.lut.RealtimeVideoRendererTransformTest --stacktrace
+
+      - name: Build default debug APK
+        working-directory: photon_repo
+        run: |
+          gradle --no-daemon :app:assembleDefaultDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: photon-camera-debug-apk
+          path: photon_repo/app/build/outputs/apk/default/debug/app-default-debug.apk
+          if-no-files-found: error
